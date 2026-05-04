@@ -1,0 +1,7 @@
+aiogram
+sqlalchemy
+asyncpg
+fastapi
+uvicorn[standard]
+aiohttp
+python-multipart
