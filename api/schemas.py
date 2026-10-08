@@ -8,3 +8,7 @@ class VerifyBody(BaseModel):
     bot_name: str = "unknown"
     days: int = 0
     expected_amount: float = 0.0
+
+
+class SmsIngestBody(BaseModel):
+    text: str

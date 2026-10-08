@@ -18,20 +18,21 @@ async def notify_admin(bot, text: str):
 
 from aiogram.types import BufferedInputFile
 
-async def notify_channel(bot, text: str, photo: bytes = None):
+async def notify_channel(bot, text: str, photo: bytes = None, reply_markup=None):
     # List of channels to notify
     target_channels = [ch for ch in [SUBMISSION_CHANNEL] if ch]
-    
+
     for channel_id in target_channels:
         try:
             if photo:
                 await bot.send_photo(
-                    channel_id, 
+                    channel_id,
                     BufferedInputFile(photo, filename="screenshot.jpg"),
                     caption=text,
-                    parse_mode=ParseMode.HTML
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=reply_markup,
                 )
             else:
-                await bot.send_message(channel_id, text, parse_mode=ParseMode.HTML)
+                await bot.send_message(channel_id, text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
         except Exception as e:
             logger.error(f"Notify failed for channel {channel_id}: {e}")

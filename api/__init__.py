@@ -5,9 +5,10 @@ from api.dashboard import router as dashboard_router
 from api.webhook import router as webhook_router
 
 
-def create_app(bot) -> FastAPI:
+def create_app(bot, dp=None) -> FastAPI:
     app = FastAPI(title="PaymentChecker Pro")
     app.state.bot = bot
+    app.state.dp = dp
     app.include_router(auth_router)
     app.include_router(dashboard_router)
     app.include_router(webhook_router)

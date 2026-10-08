@@ -54,7 +54,11 @@ async def submit_utr(
 ) -> tuple[str, Optional[dict]]:
     async with async_session() as session:
         async with session.begin():
-            row = await session.scalar(select(UTR).where(UTR.utr == utr))
+            # FOR UPDATE: two near-simultaneous /verify calls for the same UTR
+            # (e.g. overlapping poller instances across a bot restart) must not
+            # both see redeemed=False and both grant -- lock the row so the
+            # second caller blocks until the first commits its redeemed=True.
+            row = await session.scalar(select(UTR).where(UTR.utr == utr).with_for_update())
             if row:
                 if row.redeemed:
                     return "already_submitted", {
@@ -71,14 +75,21 @@ async def submit_utr(
                         "submitted_at": row.submitted_at.isoformat() if row.submitted_at else None,
                     }
                 if row.amount is not None:
-                    if expected_amount > 0 and abs(row.amount - expected_amount) > 0.01:
+                    # A retry call (e.g. a bot's local poller re-verifying a
+                    # pending UTR) often omits expected_amount, defaulting it
+                    # to 0. Falling back to the amount already stored on the
+                    # row keeps the mismatch check enforced on retries instead
+                    # of silently skipping it whenever the caller doesn't
+                    # resend the amount it originally claimed.
+                    effective_expected = expected_amount or row.expected_amount or 0.0
+                    if effective_expected > 0 and abs(row.amount - effective_expected) > 0.01:
                         row.user_id, row.bot_name, row.days, row.username = user_id, bot_name, days, username
-                        row.expected_amount, row.submitted_at = expected_amount, datetime.now()
+                        row.expected_amount, row.submitted_at = effective_expected, datetime.now()
                         return "amount_mismatch", {
-                            "utr": row.utr, "actual": row.amount, "expected": expected_amount,
+                            "utr": row.utr, "actual": row.amount, "expected": effective_expected,
                         }
                     row.user_id, row.bot_name, row.days, row.username = user_id, bot_name, days, username
-                    row.expected_amount = expected_amount or row.expected_amount
+                    row.expected_amount = effective_expected
                     row.submitted_at = datetime.now()
                     row.redeemed, row.redeemed_at = True, datetime.now()
                     return "ok", {"utr": row.utr, "amount": row.amount, "sender": row.sender}
@@ -108,7 +119,7 @@ async def submit_utr(
 async def mark_redeemed(utr: str) -> bool:
     async with async_session() as session:
         async with session.begin():
-            row = await session.scalar(select(UTR).where(UTR.utr == utr))
+            row = await session.scalar(select(UTR).where(UTR.utr == utr).with_for_update())
             if not row or row.redeemed or row.amount is None or row.user_id is None:
                 return False
             row.redeemed, row.redeemed_at = True, datetime.now()
